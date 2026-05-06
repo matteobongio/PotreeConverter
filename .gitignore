@@ -5,3 +5,6 @@ Converter/obj
 Converter.vcxproj.user
 nocommit
 build
+result
+.direnv
+.envrc
