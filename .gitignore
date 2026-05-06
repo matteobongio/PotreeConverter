@@ -8,3 +8,5 @@ build
 result
 .direnv
 .envrc
+.cache/clangd/index
+compile_commands.json

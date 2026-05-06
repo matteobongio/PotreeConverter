@@ -34,6 +34,11 @@
           ];
 
           CMAKE_POLICY_VERSION_MINIMUM="3.5";
+          CMAKE_EXPORT_COMPILE_COMMANDS="ON";
+          shellHook = ''
+            echo "PotreeConverter dev shell"
+            echo "cmake -B build && ln -s build/compile_commands.json ."
+          '';
         };
       }
     );
