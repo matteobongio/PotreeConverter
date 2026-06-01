@@ -86,6 +86,18 @@ struct Vector3{
 		return Vector3(x * scalar, y * scalar, z * scalar);
 	}
 
+	Vector3 cross(const Vector3& lhs) const {
+		return Vector3(
+			y * lhs.z - z * lhs.y,
+			z * lhs.x - x * lhs.z,
+			x * lhs.y - y * lhs.x
+		);
+	}
+
+	double dot(const Vector3& lhs) const {
+		return x * lhs.x + y * lhs.y + z * lhs.z;
+	}
+
 	string toString() {
 
 		auto digits = std::numeric_limits<double>::max_digits10;
