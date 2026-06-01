@@ -1,5 +1,6 @@
 
 
+#include <cstddef>
 #include <iostream>
 #include <execution>
 
@@ -8,6 +9,7 @@
 #include "indexer.h"
 #include "sampler_poisson.h"
 #include "sampler_poisson_average.h"
+#include "sampler_curvature.h"
 #include "sampler_random.h"
 #include "Attributes.h"
 #include "PotreeConverter.h"
@@ -387,6 +389,11 @@ void indexing(Options& options, string targetDir, State& state) {
 	} else if (options.method == "poisson_average") {
 
 		SamplerPoissonAverage sampler;
+		indexer::doIndexing(targetDir, state, options, sampler);
+
+	} else if (options.method == "curvature") {
+		size_t maxNeighbours = 10, samples = 10; //TODO: cli args and actual defaults
+		SamplerCurvature sampler(maxNeighbours, samples);
 		indexer::doIndexing(targetDir, state, options, sampler);
 
 	}
