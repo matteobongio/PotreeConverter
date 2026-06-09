@@ -139,7 +139,7 @@ struct SamplerCurvature : public Sampler {
 		for (auto n : neighbours)
 			neighbourPoints.push_back(points[n]);
 		
-		if (neighbourPoints.size() < 2) return 0.0f;
+		if (neighbourPoints.size() < 3) return 0.0f;
 
 		thread_local std::mt19937 rng(std::random_device{}());
 		std::uniform_int_distribution<size_t> distribution(0, neighbourPoints.size() - 1);
@@ -147,12 +147,13 @@ struct SamplerCurvature : public Sampler {
 		double area = 0;
 		double curvature = 0;
 
-		for(size_t i = 0; i < samples; ++i) { // CNC-Uniform
+		size_t i = 0;
+		while (i < samples) { // CNC-Uniform
 			// pick 3 points at random from neighbourPoints
 			size_t ai = distribution(rng);
 			size_t bi = distribution(rng);
 			size_t ci = distribution(rng);
-			if (bi == ai || bi == ci || ai == ci) { --i; continue; }; // not a triangle, try again
+			if (bi == ai || bi == ci || ai == ci) { continue; }; // not a triangle, try again
 
 			const Point& qa = neighbourPoints[ai];
 			const Point& qb = neighbourPoints[bi];
@@ -171,6 +172,7 @@ struct SamplerCurvature : public Sampler {
 
 			area += 0.5 * uBar.dot((xj - xi).cross(xk - xi));
 			curvature += 0.5 * ui.dot(uj.cross(uk));
+			i++;
 		}
 
 		// if (std::abs(area) < 1e-10) return 0.0f;
@@ -455,6 +457,8 @@ struct SamplerCurvature : public Sampler {
 						return true;
 					}
 
+
+
 					double dd = squaredDistance(point, candidate);
 
 					if (dd < curvSqSpacing) {
@@ -475,9 +479,9 @@ struct SamplerCurvature : public Sampler {
 
 			auto parallel = std::execution::par_unseq;
 			std::sort(parallel, points.begin(), points.end(), [center](Point a, Point b) -> bool {
-				//sort by curvature first
-				if (std::abs(a.curvature - b.curvature) > 1e-4f)
-					return a.curvature > b.curvature; 
+				// //sort by curvature first
+				// if (std::abs(a.curvature - b.curvature) > 1e-4f)
+				// 	return a.curvature > b.curvature; 
 
 				auto ax = a.x - center.x;
 				auto ay = a.y - center.y;
@@ -489,8 +493,10 @@ struct SamplerCurvature : public Sampler {
 				auto bz = b.z - center.z;
 				auto bdd = bx * bx + by * by + bz * bz;
 
-				// sort by distance to center
-				return add < bdd;
+				// sort by distance to center influenced by curvature, because the early exit guard relies on differences to center between candidate and accepted
+				double aScore = add / (1.0 + a.curvature); // +1 to avoid division by zero
+				double bScore = bdd / (1.0 + b.curvature);
+				return aScore < bScore;
 
 				// sort by manhattan distance to center
 				//return (ax + ay + az) < (bx + by + bz);
