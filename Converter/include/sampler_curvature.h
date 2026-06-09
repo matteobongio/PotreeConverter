@@ -23,6 +23,14 @@ struct SamplerCurvature : public Sampler {
 	{
 	}
 
+	struct HeapCmp {
+		const vector<double>& dist;
+		HeapCmp(const vector<double>& dist) : dist(dist) {}
+		bool operator()(size_t a, size_t b) const {
+			return dist[a] < dist[b];
+		}
+	};
+
 	struct Point {
 		double x;
 		double y;
@@ -80,7 +88,7 @@ struct SamplerCurvature : public Sampler {
 	//    return neighbours > 0 ? curvature / neighbours : 0.0f;
 	// }
 
-	float meanCurvature(
+	float gaussCurvature(
 		const vector<Point>& points,
 		int64_t pointIndex,
 		double neighbourhoodRadiusSq
@@ -95,13 +103,6 @@ struct SamplerCurvature : public Sampler {
 		vector<size_t> neighbours;
 		neighbours.reserve(maxNeighbours);
 
-		struct HeapCmp {
-			const vector<double>& dist;
-			HeapCmp(const vector<double>& dist) : dist(dist) {}
-			bool operator()(size_t a, size_t b) const {
-				return dist[a] < dist[b];
-			}
-		};
 
 		HeapCmp cmp(dist);
 
@@ -146,44 +147,135 @@ struct SamplerCurvature : public Sampler {
 		double area = 0;
 		double curvature = 0;
 
-		for(size_t i = 0; i < samples; ++i) {
-			// pick 2 points at random from neighbourPoints
+		for(size_t i = 0; i < samples; ++i) { // CNC-Uniform
+			// pick 3 points at random from neighbourPoints
 			size_t ai = distribution(rng);
 			size_t bi = distribution(rng);
-			if (bi == ai) { --i; continue; };
+			size_t ci = distribution(rng);
+			if (bi == ai || bi == ci || ai == ci) { --i; continue; }; // not a triangle, try again
 
-			const Point& qj = neighbourPoints[ai];
-			const Point& qk = neighbourPoints[bi];
+			const Point& qa = neighbourPoints[ai];
+			const Point& qb = neighbourPoints[bi];
+			const Point& qc = neighbourPoints[ci];
 
-			Vector3 xi = Vector3(point.x, point.y, point.z);
-			Vector3 ui = Vector3(point.nx, point.ny, point.nz);
+			Vector3 xi = Vector3(qc.x, qc.y, qc.z);
+			Vector3 ui = Vector3(qc.nx, qc.ny, qc.nz);
 
-			Vector3 xj = Vector3(qj.x, qj.y, qj.z);
-			Vector3 uj = Vector3(qj.nx, qj.ny, qj.nz);
+			Vector3 xj = Vector3(qa.x, qa.y, qa.z);
+			Vector3 uj = Vector3(qa.nx, qa.ny, qa.nz);
 
-			Vector3 xk = Vector3(qk.x, qk.y, qk.z);
-			Vector3 uk = Vector3(qk.nx, qk.ny, qk.nz);
+			Vector3 xk = Vector3(qb.x, qb.y, qb.z);
+			Vector3 uk = Vector3(qb.nx, qb.ny, qb.nz);
 
 			auto uBar = (ui + uj + uk)/3;
 
 			area += 0.5 * uBar.dot((xj - xi).cross(xk - xi));
-			// curvature += 0.5 * uBar.dot(
-			// 	(uk - uj).cross(xi)
-			// 	+ (ui - uk).cross(xj)
-			// 	+ (uj - ui).cross(xk)
-			// );
-			curvature += 0.5 * uBar.dot(
-				(uj - uk).cross(xj - xk) +
-				(uk - ui).cross(xk - xi) +
-				(ui - uj).cross(xi - xj)
-			);
+			curvature += 0.5 * ui.dot(uj.cross(uk));
 		}
 
-		if (std::abs(area) < 1e-10) return 0.0f;
-		return (float)(curvature / area);
+		// if (std::abs(area) < 1e-10) return 0.0f;
+		if (curvature < 0)
+			curvature *= -1;
 
-		return curvature / area;
+		return (float)(curvature / area);
 	}
+
+	// float meanCurvature(
+	// 	const vector<Point>& points,
+	// 	int64_t pointIndex,
+	// 	double neighbourhoodRadiusSq
+	// ) {
+	// 	auto point = points[pointIndex];
+	// 	double px = point.x, py = point.y, pz = point.z,
+	// 	npx = point.nx, npy = point.ny, npz = point.nz;
+	//
+	// 	vector<double> dist;
+	// 	dist.reserve(points.size());
+	//
+	// 	vector<size_t> neighbours;
+	// 	neighbours.reserve(maxNeighbours);
+	//
+	// 	HeapCmp cmp(dist);
+	//
+	// 	for (size_t i = 0; i < points.size(); ++i) {
+	// 		if (i == pointIndex) {
+	// 			dist.push_back(0);
+	// 			continue;
+	// 		}
+	//
+	// 		double dx = points[i].x - px;
+	// 		double dy = points[i].y - py;
+	// 		double dz = points[i].z - pz;
+	// 		double distSq = dx*dx + dy*dy + dz*dz;
+	//
+	// 		dist.push_back(distSq);
+	//
+	// 		if (distSq > neighbourhoodRadiusSq) 
+	// 			continue;
+	//
+	// 		if (neighbours.size() < maxNeighbours) {
+	// 			neighbours.push_back(i);
+	// 			push_heap(neighbours.begin(), neighbours.end(), cmp);
+	// 		} else {
+	// 			if (dist[neighbours.back()] > distSq) {
+	// 				neighbours.pop_back();
+	// 				pop_heap(neighbours.begin(), neighbours.end(), cmp);
+	// 				neighbours.push_back(i);
+	// 				push_heap(neighbours.begin(), neighbours.end(), cmp);
+	// 			}
+	// 		}
+	// 	}
+	//
+	// 	vector<Point> neighbourPoints;
+	// 	for (auto n : neighbours)
+	// 		neighbourPoints.push_back(points[n]);
+	//
+	// 	if (neighbourPoints.size() < 2) return 0.0f;
+	//
+	// 	thread_local std::mt19937 rng(std::random_device{}());
+	// 	std::uniform_int_distribution<size_t> distribution(0, neighbourPoints.size() - 1);
+	//
+	// 	double area = 0;
+	// 	double curvature = 0;
+	//
+	// 	for(size_t i = 0; i < samples; ++i) {
+	// 		// pick 2 points at random from neighbourPoints
+	// 		size_t ai = distribution(rng);
+	// 		size_t bi = distribution(rng);
+	// 		if (bi == ai) { --i; continue; };
+	//
+	// 		const Point& qj = neighbourPoints[ai];
+	// 		const Point& qk = neighbourPoints[bi];
+	//
+	// 		Vector3 xi = Vector3(point.x, point.y, point.z);
+	// 		Vector3 ui = Vector3(point.nx, point.ny, point.nz);
+	//
+	// 		Vector3 xj = Vector3(qj.x, qj.y, qj.z);
+	// 		Vector3 uj = Vector3(qj.nx, qj.ny, qj.nz);
+	//
+	// 		Vector3 xk = Vector3(qk.x, qk.y, qk.z);
+	// 		Vector3 uk = Vector3(qk.nx, qk.ny, qk.nz);
+	//
+	// 		auto uBar = (ui + uj + uk)/3;
+	//
+	// 		area += 0.5 * uBar.dot((xj - xi).cross(xk - xi));
+	// 		// curvature += 0.5 * uBar.dot(
+	// 		// 	(uk - uj).cross(xi)
+	// 		// 	+ (ui - uk).cross(xj)
+	// 		// 	+ (uj - ui).cross(xk)
+	// 		// );
+	// 		curvature += 0.5 * uBar.dot(
+	// 			(uj - uk).cross(xj - xk) +
+	// 			(uk - ui).cross(xk - xi) +
+	// 			(ui - uj).cross(xi - xj)
+	// 		);
+	// 	}
+	//
+	// 	if (std::abs(area) < 1e-10) return 0.0f;
+	// 	return (float)(curvature / area);
+	//
+	// 	return curvature / area;
+	// }
 
 
 	// subsample a local octree from bottom up
@@ -198,7 +290,7 @@ struct SamplerCurvature : public Sampler {
 				attributes.get("NormalZ") != nullptr;
 
 			if (!hasNormals) {
-				cout << "ERROR: curvature sampler requires NormalX/NormalY/NormalZ.\n";
+				cout << "ERROR: curvature sampler requires NormalX, NormalY and NormalZ.\n";
 				cout << "Available attributes:\n";
 				for (auto& a : attributes.list) {
 					cout << "  " << a.name << "\n";
@@ -286,11 +378,11 @@ struct SamplerCurvature : public Sampler {
 					double y = (xyz[1] * scale.y) + offset.y;
 					double z = (xyz[2] * scale.z) + offset.z;
 
-					float nx = *reinterpret_cast<float*>(child->points->data_u8 + pointOffset + normalXOffset);
-					float ny = *reinterpret_cast<float*>(child->points->data_u8 + pointOffset + normalYOffset);
-					float nz = *reinterpret_cast<float*>(child->points->data_u8 + pointOffset + normalZOffset);
+					double nx = *reinterpret_cast<double*>(child->points->data_u8 + pointOffset + normalXOffset);
+					double ny = *reinterpret_cast<double*>(child->points->data_u8 + pointOffset + normalYOffset);
+					double nz = *reinterpret_cast<double*>(child->points->data_u8 + pointOffset + normalZOffset);
 
-					Point point = { x, y, z, i, childIndex, nx, ny, nz, -1.0 };
+					Point point = { x, y, z, i, childIndex, nx, ny, nz, 0.0 };
 
 					points.push_back(point);
 				}
@@ -306,10 +398,16 @@ struct SamplerCurvature : public Sampler {
 			double squaredSpacing = spacing * spacing;
 			double searchRadiusSq = squaredSpacing * 4.0;
 
+			// calculate curvature
 			for (int64_t i = 0; i < (int64_t)points.size(); i++) {
 				auto& pi = points[i];
-				pi.curvature = meanCurvature(points, i, searchRadiusSq);
+				pi.curvature = gaussCurvature(points, i, searchRadiusSq);
+				std::cerr << 'C' << pi.curvature << '\n';
 			}
+			//normalize curvature
+			float maxC = std::max_element(points.begin(), points.end(), 
+								  [](const Point& a, const Point& b){ return a.curvature < b.curvature; })->curvature;
+			if (maxC > 0) for (auto& p : points) p.curvature /= maxC;
 
 			auto squaredDistance = [](Point& a, Point& b) {
 				double dx = a.x - b.x;
@@ -324,13 +422,16 @@ struct SamplerCurvature : public Sampler {
 			auto center = (node->min + node->max) * 0.5;
 
 			auto checkAccept = [/*&dbgChecks, &dbgSumChecks,*/ &dbgNumAccepted, spacing, squaredSpacing, &squaredDistance, center /*, &numDistanceChecks*/](Point candidate) {
+				auto curvScale = candidate.curvature;
+				auto curvSqSpacing = squaredSpacing * curvScale * curvScale;
+				auto curvSpacing = spacing * curvScale;
 
 				auto cx = candidate.x - center.x;
 				auto cy = candidate.y - center.y;
 				auto cz = candidate.z - center.z;
 				auto cdd = cx * cx + cy * cy + cz * cz;
 				auto cd = sqrt(cdd);
-				auto limit = (cd - spacing);
+				auto limit = (cd - curvSpacing);
 				auto limitSquared = limit * limit;
 
 				int64_t j = 0;
@@ -356,7 +457,7 @@ struct SamplerCurvature : public Sampler {
 
 					double dd = squaredDistance(point, candidate);
 
-					if (dd < squaredSpacing) {
+					if (dd < curvSqSpacing) {
 						return false;
 					}
 
@@ -374,6 +475,9 @@ struct SamplerCurvature : public Sampler {
 
 			auto parallel = std::execution::par_unseq;
 			std::sort(parallel, points.begin(), points.end(), [center](Point a, Point b) -> bool {
+				//sort by curvature first
+				if (std::abs(a.curvature - b.curvature) > 1e-4f)
+					return a.curvature > b.curvature; 
 
 				auto ax = a.x - center.x;
 				auto ay = a.y - center.y;
