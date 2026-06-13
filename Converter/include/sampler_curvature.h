@@ -175,11 +175,15 @@ struct SamplerCurvature : public Sampler {
 			i++;
 		}
 
-		// if (std::abs(area) < 1e-10) return 0.0f;
-		if (curvature < 0)
-			curvature *= -1;
+		if (std::abs(area) < 1e-10) return 0.0f;
 
-		return (float)(curvature / area);
+
+		auto result = curvature / area;
+
+		if (result < 0)
+			result *= -1;
+
+		return (float)result;
 	}
 
 	// float meanCurvature(
@@ -403,8 +407,7 @@ struct SamplerCurvature : public Sampler {
 			// calculate curvature
 			for (int64_t i = 0; i < (int64_t)points.size(); i++) {
 				auto& pi = points[i];
-				pi.curvature = gaussCurvature(points, i, searchRadiusSq);
-				std::cerr << 'C' << pi.curvature << '\n';
+				pi.curvature = log(1 + gaussCurvature(points, i, searchRadiusSq));
 			}
 			//normalize curvature
 			float maxC = std::max_element(points.begin(), points.end(), 
@@ -424,7 +427,9 @@ struct SamplerCurvature : public Sampler {
 			auto center = (node->min + node->max) * 0.5;
 
 			auto checkAccept = [/*&dbgChecks, &dbgSumChecks,*/ &dbgNumAccepted, spacing, squaredSpacing, &squaredDistance, center /*, &numDistanceChecks*/](Point candidate) {
-				auto curvScale = candidate.curvature;
+				auto curvScale = 0.5f + 1.5f * (1.0f - candidate.curvature);
+				std::cerr << 'C' << curvScale << '\n';
+				// auto curvScale = candidate.curvature;
 				auto curvSqSpacing = squaredSpacing * curvScale * curvScale;
 				auto curvSpacing = spacing * curvScale;
 
@@ -493,10 +498,12 @@ struct SamplerCurvature : public Sampler {
 				auto bz = b.z - center.z;
 				auto bdd = bx * bx + by * by + bz * bz;
 
+				return add < bdd;
+
 				// sort by distance to center influenced by curvature, because the early exit guard relies on differences to center between candidate and accepted
-				double aScore = add / (1.0 + a.curvature); // +1 to avoid division by zero
-				double bScore = bdd / (1.0 + b.curvature);
-				return aScore < bScore;
+				// double aScore = add / (1.0 + a.curvature); // +1 to avoid division by zero
+				// double bScore = bdd / (1.0 + b.curvature);
+				// return aScore < bScore;
 
 				// sort by manhattan distance to center
 				//return (ax + ay + az) < (bx + by + bz);
