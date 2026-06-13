@@ -81,9 +81,10 @@ struct SamplerCurvature : public Sampler {
 				neighbours.push_back(i);
 				push_heap(neighbours.begin(), neighbours.end(), cmp);
 			} else {
-				if (dist[neighbours.back()] > distSq) {
-					neighbours.pop_back();
+				if (dist[neighbours.front()] > distSq) {
 					pop_heap(neighbours.begin(), neighbours.end(), cmp);
+					neighbours.pop_back();
+
 					neighbours.push_back(i);
 					push_heap(neighbours.begin(), neighbours.end(), cmp);
 				}
