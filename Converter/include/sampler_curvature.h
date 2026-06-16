@@ -265,7 +265,9 @@ struct SamplerCurvature : public Sampler {
 			// calculate curvature
 			for (int64_t i = 0; i < (int64_t)points.size(); i++) {
 				auto& pi = points[i];
-				pi.curvature = log(1 + gaussCurvature(points, i, searchRadiusSq));
+				pi.curvature = gaussCurvature(points, i, searchRadiusSq);
+				if (pi.curvature > 1000) pi.curvature = 1000; // clamp to 1000
+				pi.curvature = log(1 + pi.curvature);
 			}
 			//normalize curvature
 			float maxC = std::max_element(points.begin(), points.end(), 
@@ -286,7 +288,6 @@ struct SamplerCurvature : public Sampler {
 
 			auto checkAccept = [/*&dbgChecks, &dbgSumChecks,*/ &dbgNumAccepted, spacing, squaredSpacing, &squaredDistance, center /*, &numDistanceChecks*/](Point candidate) {
 				auto curvScale = 0.5f + 1.5f * (1.0f - candidate.curvature);
-				std::cerr << 'C' << curvScale << '\n';
 				// auto curvScale = candidate.curvature;
 				auto curvSqSpacing = squaredSpacing * curvScale * curvScale;
 				auto curvSpacing = spacing * curvScale;
